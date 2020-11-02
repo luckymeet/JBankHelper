@@ -23,7 +23,7 @@ import java.util.List;
 @Getter
 @Setter
 @ToString
-public class MismatchTransactionFlowVO {
+public class TransactionFlowListVO {
 
     List<TransactionFlow> sheetList0;
 

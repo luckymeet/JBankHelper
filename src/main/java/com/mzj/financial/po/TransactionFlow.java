@@ -2,6 +2,7 @@ package com.mzj.financial.po;
 
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.format.DateTimeFormat;
+import com.alibaba.excel.annotation.write.style.ColumnWidth;
 import com.mzj.common.Constans;
 import lombok.Data;
 import lombok.Getter;
@@ -33,6 +34,7 @@ import java.util.Date;
 @CompoundIndexes({
         @CompoundIndex(name = "idx_tf", def = "{'accName': 1, 'tradeDate': 1}")
 })
+@ColumnWidth(25)
 public class TransactionFlow {
 
     /**
@@ -46,6 +48,11 @@ public class TransactionFlow {
     @ExcelProperty("账户")
     @Indexed
     private String accName;
+    /**
+     * 对方账户
+     */
+    @ExcelProperty("对方账户")
+    private String opsAccName;
     /**
      * 交易日期
      */
@@ -63,11 +70,6 @@ public class TransactionFlow {
     @ExcelProperty("贷方金额")
     private BigDecimal borrowAmt;
     /**
-     * 对方账户
-     */
-    @ExcelProperty("对方账户")
-    private String opsAccName;
-    /**
      * 备注
      */
     @ExcelProperty("备注")
@@ -75,6 +77,7 @@ public class TransactionFlow {
     /**
      * 是否核对成功
      */
-    private boolean check;
+    @ExcelProperty("核对结果")
+    private String check;
 
 }

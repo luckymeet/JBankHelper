@@ -2,10 +2,13 @@ package com.mzj.financial.controller;
 
 import com.mzj.common.response.ResponseVO;
 import com.mzj.financial.service.AccountCheckService;
-import com.mzj.financial.vo.MismatchTransactionFlowVO;
+import com.mzj.financial.vo.TransactionFlowListVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 
 /**
  * 对账
@@ -33,8 +36,12 @@ public class AccountCheckController {
     }
 
     @GetMapping("/list")
-    public ResponseVO<MismatchTransactionFlowVO> queryMismatchTransactionFlow(String type) {
+    public ResponseVO<TransactionFlowListVO> queryMismatchTransactionFlow(String type) {
         return ResponseVO.success(accountCheckService.queryMismatchTransactionFlow(type), "查询成功");
     }
 
+    @GetMapping("export")
+    public void download(HttpServletResponse response, String type) throws IOException {
+        accountCheckService.exportResult(response, type);
+    }
 }

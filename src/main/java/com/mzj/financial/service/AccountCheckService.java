@@ -1,7 +1,11 @@
 package com.mzj.financial.service;
 
-import com.mzj.financial.vo.MismatchTransactionFlowVO;
+import com.mzj.financial.vo.TransactionFlowListVO;
 import org.springframework.web.multipart.MultipartFile;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 
 /**
  * 对账
@@ -27,5 +31,11 @@ public interface AccountCheckService {
      * 查询不匹配的流水
      * @return
      */
-    MismatchTransactionFlowVO queryMismatchTransactionFlow(String type);
+    TransactionFlowListVO queryMismatchTransactionFlow(String type);
+
+    /**
+     * 导出结果到Excel
+     * @param response
+     */
+    void exportResult(HttpServletResponse response, String type) throws IOException;
 }

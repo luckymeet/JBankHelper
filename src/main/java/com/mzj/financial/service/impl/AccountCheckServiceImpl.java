@@ -1,20 +1,26 @@
 package com.mzj.financial.service.impl;
 
 import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.util.DateUtils;
+import com.alibaba.fastjson.JSON;
 import com.mzj.common.Constans;
+import com.mzj.common.response.ResponseCode;
+import com.mzj.common.response.ResponseVO;
 import com.mzj.financial.po.TransactionFlow;
 import com.mzj.financial.service.AccountCheckService;
-import com.mzj.financial.vo.MismatchTransactionFlowVO;
+import com.mzj.financial.vo.TransactionFlowListVO;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -65,21 +71,25 @@ public class AccountCheckServiceImpl implements AccountCheckService {
     }
 
     @Override
-    public MismatchTransactionFlowVO queryMismatchTransactionFlow(String type) {
+    public TransactionFlowListVO queryMismatchTransactionFlow(String type) {
+        return getTransactionFlowListVO(type, false);
+    }
+
+    private TransactionFlowListVO getTransactionFlowListVO(String type, boolean isAll) {
         List<TransactionFlow> list0 = mongoTemplate.findAll(TransactionFlow.class, TRANSACTION_FLOW_0);
         List<TransactionFlow> list1 = mongoTemplate.findAll(TransactionFlow.class, TRANSACTION_FLOW_1);
         Map<String, TransactionFlow> map0 = listToTreeMap(list0, type);
         Map<String, TransactionFlow> map1 = listToTreeMap(list1, type);
-        List<TransactionFlow> mismatchList0 = new ArrayList<>();
-        List<TransactionFlow> mismatchList1 = new ArrayList<>();
+        List<TransactionFlow> sheetList0 = new ArrayList<>();
+        List<TransactionFlow> sheetList1 = new ArrayList<>();
 
         for (Map.Entry<String, TransactionFlow> entry : map0.entrySet()) {
             String key = entry.getKey();
             TransactionFlow tf0 = entry.getValue();
             TransactionFlow tf1 = map1.get(key);
             if (tf1 == null) {
-                tf0.setCheck(false);
-                mismatchList0.add(tf0);
+                tf0.setCheck("✘");
+                sheetList0.add(tf0);
                 continue;
             }
             // 企业总借入金额，一般为负数
@@ -87,8 +97,12 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             // 银行总贷出金额，一般为正数
             BigDecimal totalLendAmt = this.subtract(tf0.getLendAmt(), tf1.getBorrowAmt());
             if (this.add(totalBorrowAmt, totalLendAmt).compareTo(BigDecimal.ZERO) != 0) {
-                tf0.setCheck(false);
-                mismatchList0.add(tf0);
+                tf0.setCheck("✘");
+                sheetList0.add(tf0);
+            }
+            if (isAll) {
+                tf0.setCheck("✔");
+                sheetList0.add(tf0);
             }
         }
 
@@ -97,8 +111,8 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             TransactionFlow tf1 = entry.getValue();
             TransactionFlow tf0 = map0.get(key);
             if (tf0 == null) {
-                tf1.setCheck(false);
-                mismatchList1.add(tf1);
+                tf1.setCheck("✘");
+                sheetList1.add(tf1);
                 continue;
             }
             // 企业总借入金额，一般为负数
@@ -106,15 +120,49 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             // 银行总贷出金额，一般为正数
             BigDecimal totalLendAmt = this.subtract(tf0.getLendAmt(), tf1.getBorrowAmt());
             if (this.add(totalBorrowAmt, totalLendAmt).compareTo(BigDecimal.ZERO) != 0) {
-                tf1.setCheck(false);
-                mismatchList1.add(tf1);
+                tf1.setCheck("✘");
+                sheetList1.add(tf1);
+            }
+            if (isAll) {
+                tf1.setCheck("✔");
+                sheetList1.add(tf1);
             }
         }
 
-        MismatchTransactionFlowVO vo = new MismatchTransactionFlowVO();
-        vo.setSheetList0(mismatchList0);
-        vo.setSheetList1(mismatchList1);
+        TransactionFlowListVO vo = new TransactionFlowListVO();
+        vo.setSheetList0(sheetList0);
+        vo.setSheetList1(sheetList1);
         return vo;
+    }
+
+    @Override
+    public void exportResult(HttpServletResponse response, String type) throws IOException {
+        ExcelWriter excelWriter = null;
+        try {
+            response.setContentType("application/vnd.ms-excel");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("对账结果", "UTF-8").replaceAll("\\+", "%20");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+
+            TransactionFlowListVO transactionFlowListVO = getTransactionFlowListVO(type, true);
+
+            excelWriter = EasyExcel.write(response.getOutputStream(), TransactionFlow.class).build();
+            excelWriter.write(transactionFlowListVO.getSheetList0(), EasyExcel.writerSheet(0, "逆时账").build());
+            excelWriter.write(transactionFlowListVO.getSheetList1(), EasyExcel.writerSheet(1, "银行流水").build());
+        } catch (Exception e) {
+            log.error("下载文件失败", e);
+            // 重置response
+            response.reset();
+            response.setContentType("application/json");
+            response.setCharacterEncoding("utf-8");
+            ResponseVO<Object> responseVO = ResponseVO.fail(ResponseCode.ERR_500.getCode(), "下载文件失败");
+            response.getWriter().println(JSON.toJSONString(responseVO));
+        } finally {
+            // 千万别忘记finish 会帮忙关闭流
+            if (excelWriter != null) {
+                excelWriter.finish();
+            }
+        }
     }
 
     private Map<String, TransactionFlow> listToTreeMap(List<TransactionFlow> list, String type) {
@@ -139,7 +187,7 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             } catch (ParseException e) {
                 e.printStackTrace();
             }
-        } else if (type.charAt(1) == '2'){
+        } else if (type.charAt(1) == '2') {
             try {
                 String tradeDate = DateUtils.format(DateUtils.parseDate(tf.getTradeDate(), Constans.dataFormat), "yyyy年M月");
                 tf.setTradeDate(tradeDate);
