@@ -60,14 +60,14 @@ public class TransactionFlow {
 //    @DateTimeFormat(Constans.dataFormat)
     private String tradeDate;
     /**
-     * 贷方金额
+     * 贷出金额
      */
-    @ExcelProperty("借方金额")
+    @ExcelProperty("贷出金额")
     private BigDecimal lendAmt;
     /**
-     * 借方金额
+     * 借入金额
      */
-    @ExcelProperty("贷方金额")
+    @ExcelProperty("借入金额")
     private BigDecimal borrowAmt;
     /**
      * 备注

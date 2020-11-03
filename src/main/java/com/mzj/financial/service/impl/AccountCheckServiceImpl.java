@@ -3,6 +3,7 @@ package com.mzj.financial.service.impl;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.util.DateUtils;
+import com.alibaba.excel.write.metadata.fill.FillConfig;
 import com.alibaba.fastjson.JSON;
 import com.mzj.common.Constans;
 import com.mzj.common.response.ResponseCode;
@@ -18,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.text.ParseException;
@@ -88,17 +88,16 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             TransactionFlow tf0 = entry.getValue();
             TransactionFlow tf1 = map1.get(key);
             if (tf1 == null) {
-                tf0.setCheck("✘");
                 sheetList0.add(tf0);
                 continue;
             }
             // 企业总借入金额，一般为负数
             BigDecimal totalBorrowAmt = this.subtract(tf0.getLendAmt(), tf0.getBorrowAmt());
             // 银行总贷出金额，一般为正数
-            BigDecimal totalLendAmt = this.subtract(tf0.getLendAmt(), tf1.getBorrowAmt());
+            BigDecimal totalLendAmt = this.subtract(tf1.getLendAmt(), tf1.getBorrowAmt());
             if (this.add(totalBorrowAmt, totalLendAmt).compareTo(BigDecimal.ZERO) != 0) {
-                tf0.setCheck("✘");
                 sheetList0.add(tf0);
+                continue;
             }
             if (isAll) {
                 tf0.setCheck("✔");
@@ -111,17 +110,16 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             TransactionFlow tf1 = entry.getValue();
             TransactionFlow tf0 = map0.get(key);
             if (tf0 == null) {
-                tf1.setCheck("✘");
                 sheetList1.add(tf1);
                 continue;
             }
             // 企业总借入金额，一般为负数
             BigDecimal totalBorrowAmt = this.subtract(tf0.getLendAmt(), tf0.getBorrowAmt());
             // 银行总贷出金额，一般为正数
-            BigDecimal totalLendAmt = this.subtract(tf0.getLendAmt(), tf1.getBorrowAmt());
+            BigDecimal totalLendAmt = this.subtract(tf1.getLendAmt(), tf1.getBorrowAmt());
             if (this.add(totalBorrowAmt, totalLendAmt).compareTo(BigDecimal.ZERO) != 0) {
-                tf1.setCheck("✘");
                 sheetList1.add(tf1);
+                continue;
             }
             if (isAll) {
                 tf1.setCheck("✔");
@@ -142,13 +140,34 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             response.setContentType("application/vnd.ms-excel");
             response.setCharacterEncoding("utf-8");
             String fileName = URLEncoder.encode("对账结果", "UTF-8").replaceAll("\\+", "%20");
+            String templateFileName = this.getClass().getResource("/template/AccountCheck.xlsx").getPath();
             response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
             TransactionFlowListVO transactionFlowListVO = getTransactionFlowListVO(type, true);
+            List<TransactionFlow> sheetList0 = transactionFlowListVO.getSheetList0();
+            List<TransactionFlow> sheetList1 = transactionFlowListVO.getSheetList1();
+            Map<String, BigDecimal> sheetMap0 = groupCountAmt(sheetList0);
+            Map<String, BigDecimal> sheetMap1 = groupCountAmt(sheetList1);
+            List<Map<String, Object>> statisList = new ArrayList<>();
+            for (Map.Entry<String, BigDecimal> entry : sheetMap0.entrySet()) {
+                Map<String, Object> map = new TreeMap<>();
+                String opsAccName = entry.getKey();
+                BigDecimal borrowAmt = entry.getValue();
+                BigDecimal repayAmt = sheetMap1.get(opsAccName).multiply(new BigDecimal("-1"));
+                map.put("borrowAmt", borrowAmt);
+                map.put("opsAccName", opsAccName);
+                map.put("repayAmt", repayAmt);
+                BigDecimal difAmt = this.subtract(borrowAmt, repayAmt);
+                if (difAmt.compareTo(BigDecimal.ZERO) != 0) {
+                    map.put("difAmt", difAmt);
+                }
+                statisList.add(map);
+            }
 
-            excelWriter = EasyExcel.write(response.getOutputStream(), TransactionFlow.class).build();
-            excelWriter.write(transactionFlowListVO.getSheetList0(), EasyExcel.writerSheet(0, "逆时账").build());
-            excelWriter.write(transactionFlowListVO.getSheetList1(), EasyExcel.writerSheet(1, "银行流水").build());
+            excelWriter = EasyExcel.write(response.getOutputStream()).withTemplate(templateFileName).build();
+            excelWriter.fill(sheetList0, EasyExcel.writerSheet(0).build());
+            excelWriter.fill(sheetList1, EasyExcel.writerSheet(1).build());
+            excelWriter.fill(statisList, EasyExcel.writerSheet(2).build());
         } catch (Exception e) {
             log.error("下载文件失败", e);
             // 重置response
@@ -158,11 +177,25 @@ public class AccountCheckServiceImpl implements AccountCheckService {
             ResponseVO<Object> responseVO = ResponseVO.fail(ResponseCode.ERR_500.getCode(), "下载文件失败");
             response.getWriter().println(JSON.toJSONString(responseVO));
         } finally {
-            // 千万别忘记finish 会帮忙关闭流
+            // 关闭流
             if (excelWriter != null) {
                 excelWriter.finish();
             }
         }
+    }
+
+    private Map<String, BigDecimal> groupCountAmt(List<TransactionFlow> list) {
+        Map<String, BigDecimal> map = new TreeMap<>();
+        for (TransactionFlow tf : list) {
+            String key = tf.getOpsAccName();
+            BigDecimal value = this.subtract(tf.getBorrowAmt(), tf.getLendAmt());
+            if (map.containsKey(key)) {
+                map.put(key, this.add(map.get(key), value));
+            } else {
+                map.put(key, value);
+            }
+        }
+        return map;
     }
 
     private Map<String, TransactionFlow> listToTreeMap(List<TransactionFlow> list, String type) {
@@ -196,7 +229,7 @@ public class AccountCheckServiceImpl implements AccountCheckService {
                 e.printStackTrace();
             }
         }
-        return key.toString();
+        return key.toString().replaceAll("\\s*", "");
     }
 
     private BigDecimal add(BigDecimal bd1, BigDecimal bd2) {
