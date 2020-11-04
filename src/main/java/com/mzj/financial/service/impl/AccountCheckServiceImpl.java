@@ -3,7 +3,6 @@ package com.mzj.financial.service.impl;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.util.DateUtils;
-import com.alibaba.excel.write.metadata.fill.FillConfig;
 import com.alibaba.fastjson.JSON;
 import com.mzj.common.Constans;
 import com.mzj.common.response.ResponseCode;
@@ -13,6 +12,7 @@ import com.mzj.financial.service.AccountCheckService;
 import com.mzj.financial.vo.TransactionFlowListVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -135,12 +135,12 @@ public class AccountCheckServiceImpl implements AccountCheckService {
 
     @Override
     public void exportResult(HttpServletResponse response, String type) throws IOException {
+        String templateFilePath = "/template/AccountCheck.xlsx";
         ExcelWriter excelWriter = null;
         try {
             response.setContentType("application/vnd.ms-excel");
             response.setCharacterEncoding("utf-8");
             String fileName = URLEncoder.encode("对账结果", "UTF-8").replaceAll("\\+", "%20");
-            String templateFileName = this.getClass().getResource("/template/AccountCheck.xlsx").getPath();
             response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
             TransactionFlowListVO transactionFlowListVO = getTransactionFlowListVO(type, true);
@@ -164,7 +164,7 @@ public class AccountCheckServiceImpl implements AccountCheckService {
                 statisList.add(map);
             }
 
-            excelWriter = EasyExcel.write(response.getOutputStream()).withTemplate(templateFileName).build();
+            excelWriter = EasyExcel.write(response.getOutputStream()).withTemplate(new ClassPathResource(templateFilePath).getInputStream()).build();
             excelWriter.fill(sheetList0, EasyExcel.writerSheet(0).build());
             excelWriter.fill(sheetList1, EasyExcel.writerSheet(1).build());
             excelWriter.fill(statisList, EasyExcel.writerSheet(2).build());
