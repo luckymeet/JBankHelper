@@ -9,3 +9,10 @@ spring:
       username: jbank
       password: '123456'
       database: jbank
+
+logging:
+  file:
+    name: JBankHelper.log
+    path: /service/log
+    max-size: 10MB
+    max-history: 7
