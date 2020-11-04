@@ -12,6 +12,7 @@ spring:
 
 logging:
   file:
-    path: /service/log/jbank-helper/jbank-helper.log
+    path: /service/log/jbank-helper
+    name: jbank-helper.log
     max-size: 10MB
     max-history: 7
